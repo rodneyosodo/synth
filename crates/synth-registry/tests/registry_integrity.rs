@@ -111,3 +111,27 @@ fn d_schottky_limits_are_the_datasheet_ratings_of_its_mpn() {
     assert_eq!(limits.max_voltage_v, Some(40.0));
     assert_eq!(limits.max_current_ma, Some(1000.0));
 }
+
+#[test]
+fn no_two_active_parts_share_a_manufacturer_part_number() {
+    use std::collections::BTreeMap;
+    let dir = workspace_root().join("registry").join("parts");
+    let registry = synth_registry::load_dir(&dir).expect("seed registry must load without errors");
+    let mut by_mpn: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (_, part) in registry.iter() {
+        if part.lifecycle != synth_registry::Lifecycle::Active {
+            continue;
+        }
+        if let Some(mpn) = part.mpn.as_deref().filter(|m| !m.trim().is_empty()) {
+            by_mpn
+                .entry(mpn.to_ascii_lowercase())
+                .or_default()
+                .push(part.id.0.clone());
+        }
+    }
+    let duplicates: Vec<_> = by_mpn.iter().filter(|(_, ids)| ids.len() > 1).collect();
+    assert!(
+        duplicates.is_empty(),
+        "one canonical active id per physical part; mark the others obsolete with a substitute: {duplicates:?}"
+    );
+}
