@@ -2,6 +2,19 @@
 
 For CI and agent workflows, `synth check DESIGN.synth --json` is the single deterministic, model-free gate for compiler validation and DRC. Add `--fab` to require a complete KiCad manufacturing export and receive SHA-256 hashes for the emitted files. A timed-out or unavailable physical stage is reported as `unknown` and blocks the command; it is never treated as a pass.
 
+The report carries a `verdict` folded from its `gates` (precedence `empty > blocked > fail > warn > pass`), and the exit code follows it:
+
+| Exit | Verdict | Meaning |
+|---|---|---|
+| 0 | `READY` | Every gate ran and passed. |
+| 1 | `NOT_READY` | A gate ran and failed (`verdict_detail.failing_gates`). |
+| 3 | `INCOMPLETE` | A gate could not be evaluated: an `unknown` stage, a missing router or `kicad-cli` (`verdict_detail.blocked_gates`). |
+| 4 | `EMPTY` | The design has no components or no nets. |
+
+A stage skipped only because the source stage failed is `blocked` with `blocked_by: "source"` and does not lift the verdict above `NOT_READY`.
+
+Every report also carries `design_hash`, a SHA-256 over the `.synth` source and its imports, both layout sidecars, the registry parts the design uses, and the manufacturer profile and stackup, with `design_hash_files` listing each covered input. `synth export-kicad` and the `synth_export` MCP tool write `evidence.json` beside the artefacts (hash, tool version, verdict, gates). `synth check DESIGN.synth --evidence out/evidence.json` refuses with exit 3 when the design has changed since that evidence was recorded, and lists the changed, added and removed inputs. Writing evidence never changes the hash.
+
 ## Tri-state native stages
 
 Stages that shell out to `kicad-cli` are tri-state, because a check that could not run is neither a pass nor a failure:
